@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="45" fill="none" stroke="#1e293b" stroke-width="5"/>
+    <path d="M20,50 Q35,20 50,50 T80,50" fill="none" stroke="#38bdf8" stroke-width="6" stroke-linecap="round">
+        <animate attributeName="d" 
+                 dur="2s" 
+                 repeatCount="indefinite"
+                 values="M20,50 Q35,20 50,50 T80,50;
+                         M20,50 Q35,80 50,50 T80,50;
+                         M20,50 Q35,20 50,50 T80,50"/>
+    </path>
+    <circle cx="50" cy="50" r="8" fill="#38bdf8">
+        <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite"/>
+    </circle>
+</svg>

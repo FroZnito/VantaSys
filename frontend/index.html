@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VantaSys Omniscience</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo-area">
+                <img src="assets/logo.svg" alt="Logo" class="logo-img">
+            </div>
+            <div class="nav-links">
+                <div class="nav-item active" data-view="dashboard" title="Dashboard">
+                    <ion-icon name="grid-outline"></ion-icon>
+                </div>
+                <div class="nav-item" data-view="analytics" title="Analytics">
+                    <ion-icon name="analytics-outline"></ion-icon>
+                </div>
+                <div class="nav-item" data-view="hardware" title="Deep Dive">
+                    <ion-icon name="hardware-chip-outline"></ion-icon>
+                </div>
+                <div class="nav-item" data-view="services" title="Services">
+                    <ion-icon name="layers-outline"></ion-icon>
+                </div>
+            </div>
+            
+            <!-- Event Log / Terminal -->
+            <div class="event-log-container">
+                <div class="event-title">EVENT LOG</div>
+                <div id="event-log-list">
+                    <div class="log-item">System Initialized</div>
+                </div>
+            </div>
+
+            <div class="connection-status">
+                <span id="conn-dot" class="dot disconnected"></span>
+            </div>
+        </nav>
+
+        <main class="content-area">
+            <!-- Header -->
+            <header class="dashboard-header">
+                <div class="titles">
+                    <h1 id="sys-hostname">VantaSys</h1>
+                    <small id="sys-os-full">Connecting...</small>
+                </div>
+                <div class="header-stats">
+                    <div class="stat-pill">
+                        <ion-icon name="time-outline"></ion-icon>
+                        <span id="sys-uptime">00:00:00</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- VIEW: DASHBOARD -->
+            <section id="view-dashboard" class="view-section active">
+                <div class="bento-grid">
+                    <!-- CPU (With Dense Specs) -->
+                    <div class="tile tile-large tile-cpu interactive" onclick="inspect('cpu')">
+                        <div class="tile-header">
+                            <h3>Processor Unity</h3>
+                            <span class="badge" id="cpu-model">...</span>
+                        </div>
+                        <div class="content-wrapper">
+                            <div class="gauge-wrapper">
+                                <canvas id="cpuGauge"></canvas>
+                                <div class="gauge-value" id="cpu-val">0%</div>
+                            </div>
+                            <div class="chart-area">
+                                <canvas id="cpuHistory"></canvas>
+                            </div>
+                        </div>
+                        
+                        <!-- NEW: Dense Specs (CPU-Z Style) -->
+                        <div class="dense-info">
+                            <div class="dense-item"><div class="dense-label">Socket</div><div class="dense-val" id="cpu-socket">-</div></div>
+                            <div class="dense-item"><div class="dense-label">Stepping</div><div class="dense-val" id="cpu-stepping">-</div></div>
+                            <div class="dense-item"><div class="dense-label">L2 Cache</div><div class="dense-val" id="cpu-l2">-</div></div>
+                            <div class="dense-item"><div class="dense-label">L3 Cache</div><div class="dense-val" id="cpu-l3">-</div></div>
+                        </div>
+
+                        <div class="cores-grid" id="cpu-cores"></div>
+                    </div>
+
+                    <!-- Memory (With Dense Module Specs) -->
+                    <div class="tile tile-tall tile-memory interactive" onclick="inspect('memory')">
+                        <div class="tile-header"><h3>Memory</h3></div>
+                        <div class="ram-visual">
+                            <div class="ram-module">
+                                <div class="ram-fill" id="ram-fill-bar"></div>
+                            </div>
+                        </div>
+                        <div class="stat-row">
+                            <span>Used</span>
+                            <strong id="mem-used">0 GB</strong>
+                        </div>
+                        <div class="stat-row">
+                            <span>Available</span>
+                            <strong id="mem-free">0 GB</strong>
+                        </div>
+                        
+                        <!-- NEW: Dense Modules -->
+                        <div class="dense-info" style="grid-template-columns: 1fr; gap:5px; margin-top:20px;">
+                            <div class="dense-item"><div class="dense-label">Active Modules</div><div class="dense-val" id="mem-modules-count">-</div></div>
+                        </div>
+                    </div>
+
+                    <!-- Identity -->
+                    <div class="tile tile-medium tile-identity interactive" onclick="inspect('system')">
+                        <div class="tile-header"><h3>Identity</h3></div>
+                        <div class="identity-grid">
+                            <div class="id-item">
+                                <div class="id-label">GPU</div>
+                                <div class="id-val" id="gpu-name">...</div>
+                            </div>
+                            <div class="id-item">
+                                <div class="id-label">Motherboard</div>
+                                <div class="id-val" id="mobo-name">...</div>
+                            </div>
+                            <div class="id-item">
+                                <div class="id-label">BIOS</div>
+                                <div class="id-val" id="bios-ver">...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sensors -->
+                    <div class="tile tile-medium tile-sensors interactive" onclick="inspect('sensors')">
+                        <div class="tile-header"><h3>Thermals</h3></div>
+                        <div class="sensor-list" id="sensor-container"></div>
+                    </div>
+
+                    <!-- Storage -->
+                    <div class="tile tile-wide tile-storage interactive" onclick="inspect('disk')">
+                        <div class="tile-header"><h3>Storage Arrays</h3></div>
+                        <div class="disk-grid" id="disk-grid"></div>
+                    </div>
+
+                    <!-- Network -->
+                    <div class="tile tile-wide tile-network interactive" onclick="inspect('network')">
+                        <div class="tile-header"><h3>Network Interfaces</h3></div>
+                        <div class="net-grid" id="net-grid"></div>
+                        <div style="flex:1; position:relative; min-height:80px; overflow:hidden;">
+                             <canvas id="netGlobalChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Processes -->
+                    <div class="tile tile-tall tile-procs">
+                        <div class="tile-header"><h3>Top Loads</h3></div>
+                        <div style="overflow-y:auto; flex:1;">
+                            <table class="proc-table">
+                                <thead><tr><th>Name</th><th>PID</th><th>CPU</th></tr></thead>
+                                <tbody id="proc-list"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: ANALYTICS -->
+            <section id="view-analytics" class="view-section">
+                <!-- Large Historical Charts -->
+                <div class="bento-grid">
+                    <div class="tile tile-block">
+                        <div class="tile-header"><h3>Long-Term CPU Observability</h3></div>
+                        <div style="height:300px; position:relative;">
+                            <canvas id="chartLongCPU"></canvas>
+                        </div>
+                    </div>
+                    <div class="tile tile-wide">
+                        <div class="tile-header"><h3>Memory Usage Trend</h3></div>
+                        <div style="height:200px; position:relative;">
+                            <canvas id="chartLongMem"></canvas>
+                        </div>
+                    </div>
+                     <div class="tile tile-wide">
+                        <div class="tile-header"><h3>Network I/O Trend</h3></div>
+                        <div style="height:200px; position:relative;">
+                            <canvas id="chartLongNet"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: DEEP DIVE -->
+            <section id="view-hardware" class="view-section">
+                 <div class="tile tile-block">
+                    <div class="tile-header">
+                        <h3>Active Connections (Netstat)</h3>
+                        <div class="badge" onclick="fetchNetstat()" style="cursor:pointer;">Refresh</div>
+                    </div>
+                    <div class="table-container-full">
+                        <table class="full-table">
+                            <thead>
+                                <tr><th>PID</th><th>Process</th><th>Proto</th><th>Local</th><th>Remote</th><th>Status</th></tr>
+                            </thead>
+                            <tbody id="netstat-body"><tr><td colspan="6">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: SERVICES -->
+            <section id="view-services" class="view-section">
+                <div class="tile tile-block">
+                    <div class="tile-header">
+                        <h3>Windows Service Manager</h3>
+                        <div class="badge" onclick="fetchServices()" style="cursor:pointer;">Refresh List</div>
+                    </div>
+                    <div class="table-container-full">
+                        <table class="full-table" id="svc-table">
+                             <thead>
+                                <tr><th>Name</th><th>Display Name</th><th>Status</th><th>Start Type</th><th>PID</th><th>User</th></tr>
+                            </thead>
+                            <tbody id="svc-body">
+                                <tr><td colspan="6">Loading Services...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="padding:10px; font-size:0.8rem; color:var(--text-muted);">
+                        * Listing active services. Admin rights required for Start/Stop actions (Coming soon).
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Modal for Generic Inspection -->
+    <div id="inspector-modal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">Inspector</h3>
+                <ion-icon name="close-outline" onclick="closeInspector()" style="cursor:pointer; font-size:1.5rem;"></ion-icon>
+            </div>
+            <div class="modal-body" id="modal-content">
+                <!-- JSON Tree Rendered Here -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeInspector()">Close</button>
+                <div id="modal-actions"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
