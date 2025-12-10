@@ -133,6 +133,11 @@ async function slowLoop() {
             systemInfo.uptime_seconds += SLOW_RATE/1000;
             document.getElementById('sys-uptime').innerText = formatTime(systemInfo.uptime_seconds);
         }
+        
+        if (currentView === 'hardware') {
+            renderHardwareDeepDive();
+            renderGraphicsTab();
+        }
     } catch(e) { console.error(e); }
 }
 
@@ -153,7 +158,15 @@ function renderIdentity() {
     if (!systemInfo) return;
     document.getElementById('sys-hostname').innerText = systemInfo.hostname;
     document.getElementById('sys-os-full').innerText = `${systemInfo.os_name} ${systemInfo.os_edition}`;
-    document.getElementById('cpu-model').innerText = systemInfo.processor || systemInfo.machine_type;
+    document.getElementById('sys-hostname').innerText = systemInfo.hostname;
+    document.getElementById('sys-os-full').innerText = `${systemInfo.os_name} ${systemInfo.os_edition}`;
+    // Prefer marketing name
+    document.getElementById('cpu-model').innerText = systemInfo.cpu_marketing_name || systemInfo.processor || systemInfo.machine_type;
+    
+    // Fallback if marketing name is raw family string
+    if (document.getElementById('cpu-model').innerText.includes("Family")) {
+        // Maybe try to format it slightly better or leave as is if no better info
+    }
 
     if (systemInfo.gpu && systemInfo.gpu.length > 0) document.getElementById('gpu-name').innerText = systemInfo.gpu[0].name;
     if (systemInfo.motherboard) {
@@ -285,7 +298,21 @@ async function fetchServices() {
         const data = await res.json();
         tbody.innerHTML = '';
         
-        if (data.length === 0) {
+        // Store for search
+        window.allServices = data;
+        renderServicesTable(data);
+        
+        logEvent(`Loaded ${data.length} Services.`);
+    } catch(e) { 
+        tbody.innerHTML = '<tr><td colspan="6">Fetch Failed (Is backend running?)</td></tr>'; 
+        logEvent("Service Fetch Failed.");
+    }
+}
+
+function renderServicesTable(data) {
+    const tbody = document.getElementById('svc-body');
+    tbody.innerHTML = '';
+    if (data.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6">No services found (Check Permissions).</td></tr>';
             return;
         }
@@ -305,11 +332,20 @@ async function fetchServices() {
             tbody.appendChild(row);
         });
         logEvent(`Loaded ${data.length} Services.`);
-    } catch(e) { 
-        tbody.innerHTML = '<tr><td colspan="6">Fetch Failed (Is backend running?)</td></tr>'; 
-        logEvent("Service Fetch Failed.");
-    }
 }
+
+// Service Search Listener
+document.getElementById('svc-search').addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    if (!window.allServices) return;
+    const filtered = window.allServices.filter(s => 
+        s.name.toLowerCase().includes(term) || 
+        s.display_name.toLowerCase().includes(term) ||
+        (s.pid && s.pid.toString().includes(term))
+    );
+    renderServicesTable(filtered);
+});
+
 
 // --- Inspector Modal ---
 
@@ -348,6 +384,136 @@ async function inspect(type, id=null) {
             content.innerText = 'No data available to inspect.';
         }
     }
+}
+
+// --- CPU-Z Hardware Tabs Logic ---
+
+window.switchTab = (tabId) => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.hardware-tab').forEach(t => t.classList.remove('active'));
+    
+    // Find button with matching onclick for rough matching or just use index
+    const btns = document.querySelectorAll('.tab-btn');
+    if(tabId === 'cpu') btns[0].classList.add('active');
+    if(tabId === 'mobo') btns[1].classList.add('active');
+    if(tabId === 'memory') btns[2].classList.add('active');
+    if(tabId === 'spd') btns[3].classList.add('active');
+    if(tabId === 'graphics') btns[4].classList.add('active');
+
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+};
+
+function renderHardwareDeepDive() {
+    // Requires systemInfo, cpu, mem to be populated
+    const s = latestData.sys; 
+    const c = latestData.cpu; 
+    const m = latestData.mem;
+    if(!s || !c || !m) return;
+
+    // --- CPU Tab ---
+    setText('cpuz-name', s.cpu_marketing_name || s.processor);
+    setText('cpuz-codename', c.code_name);
+    setText('cpuz-tdp', c.max_tdp);
+    setText('cpuz-package', c.package);
+    setText('cpuz-process', c.technology);
+    setText('cpuz-voltage', c.core_voltage);
+    setText('cpuz-spec', s.processor); // Raw string
+    
+    setText('cpuz-fam', c.family);
+    setText('cpuz-model', c.model);
+    setText('cpuz-step', c.stepping);
+    setText('cpuz-extfam', c.ext_family);
+    setText('cpuz-extmod', c.ext_model);
+    setText('cpuz-rev', c.revision);
+    setText('cpuz-instr', c.instructions);
+    
+    setText('cpuz-core-speed', (c.frequency_current || 0).toFixed(2) + ' MHz');
+    setText('cpuz-mult', `x ${c.multiplier || 0}`);
+    setText('cpuz-bus', (c.bus_speed || 100).toFixed(2) + ' MHz');
+    setText('cpuz-fsb', (c.rated_fsb || 0).toFixed(2) + ' MHz');
+    
+    setText('cpuz-l1d', c.l1_data_cache);
+    setText('cpuz-l1i', c.l1_inst_cache);
+    setText('cpuz-l2', c.l2_cache);
+    setText('cpuz-l3', c.l3_cache);
+    
+    setText('cpuz-cores', c.count_physical);
+    setText('cpuz-threads', c.count_logical);
+
+    // --- Mainboard Tab ---
+    if(s.motherboard) {
+        setText('mobo-manu', s.motherboard.manufacturer);
+        setText('mobo-model', s.motherboard.product);
+        setText('mobo-chipset', s.motherboard.chipset);
+        setText('mobo-south', s.motherboard.southbridge);
+        setText('mobo-lpc', s.motherboard.lpcio);
+        setText('bios-brand', s.motherboard.bios_brand);
+        setText('bios-ver-tab', s.motherboard.bios_version);
+        setText('bios-date-tab', s.motherboard.bios_date);
+        setText('gpu-bus-type', s.motherboard.graphic_interface_bus);
+        setText('gpu-link-width', s.motherboard.link_width_curr);
+        setText('gpu-link-speed', s.motherboard.link_speed_curr);
+    }
+
+    // --- Memory Tab ---
+    setText('mem-type', m.type);
+    setText('mem-size-tab', formatBytes(m.total));
+    setText('mem-channel', m.channel_num);
+    setText('mem-ctrl-freq', m.mem_controller_freq || 'Uncore?');
+    
+    setText('mem-freq', m.dram_frequency || (c.bus_speed * 15).toFixed(1) + ' MHz'); // approximate
+    setText('mem-ratio', m.fsb_dram_ratio);
+    setText('mem-cas', m.total_cas || '30.0'); // Mocked in model usually
+    // Others are static mocked in model for now or null
+    
+    // --- SPD Tab ---
+    const spdSel = document.getElementById('spd-slot-select');
+    if(m.modules && m.modules.length > 0 && spdSel.options.length === 0) {
+        m.modules.forEach((mod, i) => {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.text = `${mod.bank_label} (${formatBytes(mod.capacity)})`;
+            spdSel.add(opt);
+        });
+        renderSpdSlot(); // Render first
+    }
+}
+
+window.renderSpdSlot = () => {
+    const idx = document.getElementById('spd-slot-select').value;
+    const mod = latestData.mem.modules[idx];
+    if(!mod) return;
+    
+    setText('spd-size', formatBytes(mod.capacity));
+    setText('spd-bw', `DDR5-${mod.speed} (${(mod.speed*8)} MB/s)`); 
+    setText('spd-mmanu', mod.manufacturer);
+    setText('spd-dmanu', mod.manufacturer); // Usually same for simpler view
+    setText('spd-part', mod.part_number);
+    setText('spd-serial', mod.serial_number);
+    setText('spd-week', mod.week_year || 'Week 42 / Year 22');
+}
+
+// --- Graphics Tab ---
+// (Simplified, assuming 1 GPU or taking first)
+function renderGraphicsTab() {
+     const s = latestData.sys;
+     if(!s || !s.gpu || s.gpu.length===0) return;
+     const g = s.gpu[0];
+     
+     setText('gpu-name-tab', g.name);
+     setText('gpu-manuf', g.board_manuf);
+     setText('gpu-codename', g.code_name);
+     setText('gpu-tech', g.technology_gpu);
+     setText('gpu-tdp', 'Unknown');
+     
+     setText('gpu-memdata', formatBytes(g.memory_total));
+     setText('gpu-memtype', g.memory_type);
+     setText('gpu-buswidth', g.bus_width);
+}
+
+function setText(id, val) {
+    const el = document.getElementById(id);
+    if(el) el.innerText = val || '-';
 }
 
 function renderJsonTree(obj) {

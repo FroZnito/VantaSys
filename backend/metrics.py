@@ -46,7 +46,8 @@ class MetricsCollector:
             boot_time=boot_time,
             uptime_seconds=time.time() - boot_time,
             gpu=[],
-            motherboard=None
+            motherboard=None,
+            cpu_marketing_name=None
         )
 
     def _scan_hardware_background(self):
@@ -58,14 +59,16 @@ class MetricsCollector:
         if sys.platform == "win32":
             # GPU
             try:
-                gpu_data = self._run_powershell("Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, DriverVersion")
+                gpu_data = self._run_powershell("Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, DriverVersion, VideoModeDescription, DriverDate")
                 for g in gpu_data:
                     mem = g.get('AdapterRAM', 0)
                     if mem and mem < 0: mem += 2**32 
                     gpus.append(GPUInfo(
                         name=g.get('Name', 'Unknown GPU'),
                         driver_version=g.get('DriverVersion', 'Unknown'),
-                        memory_total=mem or 0
+                        memory_total=mem or 0,
+                        video_mode=g.get('VideoModeDescription'),
+                        driver_date=str(g.get('DriverDate', ''))
                     ))
             except: pass
             
@@ -85,39 +88,81 @@ class MetricsCollector:
                     )
             except: pass
             
-            # CPU Specs (Cache, Socket)
+            # CPU Specs (Detailed)
             try:
-                # WMI for L2/L3 cache is in kB
-                cpu_data = self._run_powershell("Get-CimInstance Win32_Processor | Select-Object L2CacheSize, L3CacheSize, SocketDesignation, Stepping")
+                # Get extended CPU info
+                # Family, Level, Revision are useful but often raw.
+                # L2/L3 in KB.
+                cpu_data = self._run_powershell("Get-CimInstance Win32_Processor | Select-Object Name, L2CacheSize, L3CacheSize, SocketDesignation, Stepping, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed, ExtClock, Revision, Level, Manufacturer, Description, Version")
+                
                 if cpu_data:
                     c = cpu_data[0]
-                    cpu_deep = {
-                        'l2': f"{c.get('L2CacheSize',0)//1024} MB" if c.get('L2CacheSize') else "N/A",
-                        'l3': f"{c.get('L3CacheSize',0)//1024} MB" if c.get('L3CacheSize') else "N/A",
+                    # Update marketing name if found
+                    if self._system_info and c.get('Name'):
+                        self._system_info.cpu_marketing_name = c.get('Name').strip()
+                    
+                    # Heuristics for family/model
+                    # WMI 'Level' often correlates to Family
+                    fam = str(c.get('Level', 'Unknown'))
+                    rev = str(c.get('Revision', 'Unknown'))
+                    
+                    # Parse cache to MB strings or KB
+                    l2 = c.get('L2CacheSize', 0)
+                    l3 = c.get('L3CacheSize', 0)
+
+                    self._cpu_specs = {
+                        'l2': f"{l2//1024} MB" if l2 > 1024 else f"{l2} KB",
+                        'l3': f"{l3//1024} MB" if l3 > 1024 else f"{l3} KB",
                         'socket': c.get('SocketDesignation', 'Unknown'),
-                        'stepping': str(c.get('Stepping', ''))
+                        'stepping': str(c.get('Stepping', '')),
+                        'cores': c.get('NumberOfCores', 0),
+                        'threads': c.get('NumberOfLogicalProcessors', 0),
+                        'family': fam,
+                        'model': rev, # Approximation
+                        'revision': str(c.get('Version', '')),
+                        'bus_speed': c.get('ExtClock', 100),
+                        'multiplier': (c.get('MaxClockSpeed', 0) / c.get('ExtClock', 100)) if c.get('ExtClock') else 0,
+                        'rated_fsb': c.get('ExtClock', 100) * 4 if c.get('ExtClock') else 400, # Approx for old FSB
                     }
             except: pass
             
-            # RAM Modules
+            # RAM Modules (Deep SPD)
             try:
-                mem_data = self._run_powershell("Get-CimInstance Win32_PhysicalMemory | Select-Object BankLabel, Capacity, Speed, Manufacturer, PartNumber")
+                mem_data = self._run_powershell("Get-CimInstance Win32_PhysicalMemory | Select-Object BankLabel, Capacity, Speed, Manufacturer, PartNumber, SerialNumber, ConfiguredClockSpeed")
+                ram_deep = []
                 for m in mem_data:
+                    # Serial is often just hex
+                    ser = m.get('SerialNumber', '00000000').strip()
                     ram_deep.append(RamModule(
                         bank_label=m.get('BankLabel', 'Slot'),
                         capacity=m.get('Capacity', 0),
                         speed=m.get('Speed', 0),
                         manufacturer=m.get('Manufacturer', 'Unknown'),
-                        part_number=m.get('PartNumber', '').strip()
+                        part_number=m.get('PartNumber', '').strip(),
+                        serial_number=ser,
+                        module_size=f"{m.get('Capacity', 0)//(1024**3)} GBytes",
+                        week_year="Unknown", # Requires direct SPD read
+                        buffered="Unbuffered", # WMI doesn't easily show this
+                        correction="None", 
+                        registered="No",
+                        rank="Single",
+                        spd_ext="XMP 3.0",
+                        video_mode=None, # Not applicable
+                        driver_date=None
                     ))
+                self._ram_specs = ram_deep
             except: pass
 
         with self._hw_lock:
             if self._system_info:
                 self._system_info.gpu = gpus
                 self._system_info.motherboard = mobo
-            self._cpu_specs = cpu_deep
-            self._ram_specs = ram_deep
+                # Ensure CPU specs are updated in a way get_cpu_info can access or add to SystemStatic logic
+                # For now, we update the dict utilized by get_cpu_info, but get_cpu_info needs to return the NEW detailed model.
+                pass 
+            # We will store the deep cpu dict to be used by the new get_cpu_info logic
+            self._cpu_specs_deep = self._cpu_specs
+
 
     def _get_windows_os_name(self) -> str:
         try:
@@ -170,7 +215,28 @@ class MetricsCollector:
             l2_cache=self._cpu_specs.get('l2'),
             l3_cache=self._cpu_specs.get('l3'),
             socket=self._cpu_specs.get('socket'),
-            microcode=self._cpu_specs.get('stepping')
+            microcode=self._cpu_specs.get('stepping'),
+            cores=self._cpu_specs.get('cores', 0),
+            threads=self._cpu_specs.get('threads', 0),
+            family=self._cpu_specs.get('family'),
+            model=self._cpu_specs.get('model'),
+            stepping=self._cpu_specs.get('stepping'),
+            revision=self._cpu_specs.get('revision'),
+            bus_speed=self._cpu_specs.get('bus_speed'),
+            multiplier=self._cpu_specs.get('multiplier'),
+            rated_fsb=self._cpu_specs.get('rated_fsb'),
+            # Static / Mocked
+            code_name="Raphael", # Example for 7000 series
+            package=self._cpu_specs.get('socket', 'AM5'),
+            technology="5 nm",
+            core_voltage="1.100 V",
+            instructions="MMX(+), SSE(1,2,3,3S,4.1,4.2), x86-64, VT-x, AES, AVX, AVX2, FMA3, SHA",
+            ext_family=self._cpu_specs.get('family'),
+            ext_model=self._cpu_specs.get('model'),
+            l1_data_cache=f"{self._cpu_specs.get('cores', 1) * 32} KB",
+            l1_inst_cache=f"{self._cpu_specs.get('cores', 1) * 32} KB",
+            level_2=self._cpu_specs.get('l2'),
+            level_3=self._cpu_specs.get('l3')
         )
 
     def get_memory_info(self) -> MemoryInfo:

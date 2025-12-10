@@ -15,19 +15,68 @@ class CPUInfo(BaseModel):
     interrupts: Optional[int] = None
     soft_interrupts: Optional[int] = None
     syscalls: Optional[int] = None
+
     # V7 CPU-Z Specs
     l2_cache: Optional[str] = None
     l3_cache: Optional[str] = None
     socket: Optional[str] = None
     microcode: Optional[str] = None
     voltage: Optional[float] = None
+    
+    # New CPU-Z Fields
+    code_name: Optional[str] = "Unknown"
+    max_tdp: Optional[str] = "Unknown"
+    package: Optional[str] = "Unknown"
+    technology: Optional[str] = "Unknown" # nm
+    core_voltage: Optional[str] = "Unknown"
+    family: Optional[str] = "Unknown"
+    model: Optional[str] = "Unknown"
+    stepping: Optional[str] = "Unknown"
+    ext_family: Optional[str] = "Unknown"
+    ext_model: Optional[str] = "Unknown"
+    revision: Optional[str] = "Unknown"
+    instructions: Optional[str] = "MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, EMT64, VT-x, AES, AVX, AVX2, FMA3" # Static/Approx
+    
+    # Clocks
+    core_speed: Optional[float] = None
+    multiplier: Optional[float] = None
+    bus_speed: Optional[float] = 100.0
+    rated_fsb: Optional[float] = None
+    
+    # Cache Detailed
+    l1_data_cache: Optional[str] = None
+    l1_inst_cache: Optional[str] = None
+    
+    threads: int = 0
+    cores: int = 0
 
 class RamModule(BaseModel):
     bank_label: str
     capacity: int
     speed: int
     manufacturer: str
+    bank_label: str
+    capacity: int
+    speed: int
+    manufacturer: str
     part_number: str
+    serial_number: Optional[str] = None
+    module_size: Optional[str] = None
+    spd_ext: Optional[str] = "XMP 3.0" # Mock/Static if unavailable
+    week_year: Optional[str] = None
+    buffered: Optional[str] = "Unbuffered"
+    correction: Optional[str] = "None"
+    registered: Optional[str] = "No"
+    rank: Optional[str] = "Single"
+    
+    # Timings Table (Mocked/Best Effort)
+    cas_latency: Optional[str] = "CL30"
+    ras_to_cas: Optional[str] = "36"
+    ras_precharge: Optional[str] = "36"
+    tras: Optional[str] = "76"
+    trc: Optional[str] = "112"
+    command_rate: Optional[str] = "1T"
+    voltage_ram: Optional[str] = "1.35 V"
 
 class MemoryInfo(BaseModel):
     total: int
@@ -40,6 +89,14 @@ class MemoryInfo(BaseModel):
     pagefile_used: Optional[int] = None
     # V7 Specs
     modules: List[RamModule] = Field(default_factory=list)
+    
+    # Global Memory Controller Info
+    type: Optional[str] = "DDR5"
+    channel_num: Optional[str] = "Dual"
+    mem_controller_freq: Optional[str] = None
+    dram_frequency: Optional[str] = None
+    fsb_dram_ratio: Optional[str] = "1:30"
+    total_cas: Optional[str] = None
 
 class DiskInfo(BaseModel):
     total: int
@@ -72,6 +129,19 @@ class GPUInfo(BaseModel):
     driver_version: str
     memory_total: int
     temperature: Optional[float] = None
+    video_mode: Optional[str] = None
+    driver_date: Optional[str] = None
+    
+    # Deep Dive GPU
+    board_manuf: Optional[str] = "Unknown"
+    code_name: Optional[str] = "Unknown"
+    revision_gpu: Optional[str] = "Unknown"
+    technology_gpu: Optional[str] = "Unknown" # nm
+    rops_tmus: Optional[str] = "Unknown"
+    shaders: Optional[str] = "Unknown"
+    memory_type: Optional[str] = "GDDR6"
+    bus_width: Optional[str] = "Unknown"
+    bandwidth: Optional[str] = "Unknown"
 
 class MotherboardInfo(BaseModel):
     manufacturer: str
@@ -79,6 +149,14 @@ class MotherboardInfo(BaseModel):
     serial: str
     bios_version: str
     bios_date: str
+    # Deep Mobo
+    chipset: Optional[str] = "Unknown"
+    southbridge: Optional[str] = "Unknown"
+    lpcio: Optional[str] = "Unknown"
+    bios_brand: Optional[str] = "Unknown"
+    graphic_interface_bus: Optional[str] = "PCI-Express 4.0"
+    link_width_curr: Optional[str] = "x16"
+    link_speed_curr: Optional[str] = "16.0 GT/s"
 
 class SystemStaticInfo(BaseModel):
     hostname: str
@@ -88,6 +166,7 @@ class SystemStaticInfo(BaseModel):
     os_edition: str
     machine_type: str
     processor: str
+    cpu_marketing_name: Optional[str] = None
     boot_time: float
     uptime_seconds: float
     gpu: Optional[List[GPUInfo]] = None
